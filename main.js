@@ -3,6 +3,7 @@ var knex = require('knex');
 var xml2js = require('xml2js');
 var progress = require('progress');
 var colors = require('colors');
+var cheerio = require('cheerio');
 
 db = knex({
   client: 'mysql',
@@ -20,18 +21,18 @@ var businesses = [];
 var i, r = 0;
 var bar;
 
-request('http://www.paginegialle.it/sitemap.xml', function (error, response, body) {
-  xml2js.parseString(body, function (err, result) {
-    sources = result.sitemapindex.sitemap;
-    sources = sources.filter(function(source) {
-      return source.loc[0].indexOf('visual') < 0;
-    }).map(function(source) {
-      return source.loc[0];
-    });
-  });
+// request('http://www.paginegialle.it/sitemap.xml', function (error, response, body) {
+//   xml2js.parseString(body, function (err, result) {
+//     sources = result.sitemapindex.sitemap;
+//     sources = sources.filter(function(source) {
+//       return source.loc[0].indexOf('visual') < 0;
+//     }).map(function(source) {
+//       return source.loc[0];
+//     });
+//   });
 
-  fetchSources();
-});
+//   fetchSources();
+// });
 
 function fetchSources() {
   console.log('\nFetching tree sources'.red);
@@ -94,3 +95,41 @@ function insertBusinessStubs(businesses) {
     console.log('done!')
   });
 }
+
+function fetchBusiness(i, businesses, done) {
+  var business = {};
+
+  request(url, function (error, response, body) {
+    var $ = cheerio.load(body);
+    var addressContainer = $('.indirizzo');
+    business.title = $(addressContainer).find('h1').text();
+    business.owner = $(addressContainer).find('.insegna').text();
+    business.address = $(addressContainer).find('.street-address').text();
+    business.locality = $(addressContainer).find('.locality').text();
+    business.telephone = $(addressContainer).find('.tel').text();
+    business.categories = $(addressContainer).find('.cat-principale a').text();
+    business.website = $(addressContainer).find('.web-contatti a.sito').attr('href');
+    var meta = $('.dettagli dl dt');
+    business.meta = meta.map(function(i, _meta) {
+      return {
+        field: $(_meta).text(), 
+        value: $(_meta).next().text()
+      }
+    }).get();
+
+    storeBusiness(business);
+
+    if(i < businesses.length - 1) {
+      i ++;
+      fetchBusiness(i, businesses, done);
+    } else {
+      done(businesses)
+    }
+  });
+}
+
+function storeBusiness(business) {
+  
+}
+
+fetchBusiness('http://www.paginegialle.it/torselloalessandro');
